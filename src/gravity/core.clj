@@ -93,14 +93,10 @@
     (* amp (Math/sin theta))))
 
 (defn add-vectors [v1 v2]
-  (let [amp
-        (Math/sqrt
-          (+ (* (:amplitude v1) (:amplitude v1))
-             (* (:amplitude v2) (:amplitude v2))))
-        direction
-        (Math/atan2
-          (- (y-comp v2) (y-comp v1))
-          (- (x-comp v2) (x-comp v1)))]
+  (let [dx (+ (x-comp v1) (x-comp v2))
+        dy (+ (y-comp v1) (y-comp v2))
+        amp (Math/sqrt (+ (* dx dx) (* dy dy)))
+        direction (Math/atan2 dy dx)]
     {:amplitude amp :direction direction}))
 
 (defn update-acceleration [blackhole asteroid]
