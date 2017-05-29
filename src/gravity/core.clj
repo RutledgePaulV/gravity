@@ -3,7 +3,7 @@
             [quil.middleware :as m])
   (:import (clojure.lang Atom)))
 
-(def G 6.674E-11)
+(def G 6.674)
 
 (defn distance [m1 m2]
   (let [p1 @(:position m1)
@@ -11,6 +11,13 @@
     (Math/sqrt
       (+ (Math/pow (- (:x p1) (:x p2)) 2)
          (Math/pow (- (:y p1) (:y p2)) 2)))))
+
+(defn theta [m1 m2]
+  (let [p1 @(:position m1)
+        p2 @(:position m2)
+        dy (- (:y p2) (:y p1))
+        dx (- (:x p2) (:x p1))]
+    (Math/atan2 dy dx)))
 
 (defn calc-force [m1 m2]
   (let [r (distance m1 m2)]
@@ -45,46 +52,47 @@
   (atom {:amplitude 0 :direction 0}))
 
 (defn init-blackhole []
-  (->Mass
-    (rand-position)
-    (rand-r)
-    (black)
-    (rand-mass)
-    (zero-vector)
-    (zero-vector)))
+  (->Mass (rand-position) (rand-r) (black) (rand-mass) (zero-vector) (zero-vector)))
 
 (defn init-asteroid []
-  (->Mass
-    (rand-position)
-    (rand-r)
-    (rand-color)
-    (rand-mass)
-    (zero-vector)
-    (zero-vector)))
+  (->Mass (rand-position) (rand-r) (rand-color) (rand-mass) (zero-vector) (zero-vector)))
 
 (defn setup []
   (q/frame-rate 60)
   (q/color-mode :hsb)
-  {:blackholes (atom (set (repeatedly 1 init-blackhole)))
-   :asteroids  (atom (set (repeatedly 1 init-asteroid)))})
+  {:blackholes (atom (set (repeatedly 3 init-blackhole)))
+   :asteroids  (atom (set (repeatedly 50 init-asteroid)))})
 
 (defn x-comp [v]
-  10)
+  (let [amp (:amplitude v) theta (:direction v)]
+    (* amp (Math/cos theta))))
 
 (defn y-comp [v]
-  10)
+  (let [amp (:amplitude v) theta (:direction v)]
+    (* amp (Math/sin theta))))
 
 (defn add-vectors [v1 v2]
-  v1)
+  (let [amp
+        (Math/sqrt
+          (+ (* (:amplitude v1) (:amplitude v1))
+             (* (:amplitude v2) (:amplitude v2))))
+        direction
+        (Math/atan2
+          (- (y-comp v2) (y-comp v1))
+          (- (x-comp v2) (x-comp v1)))]
+    {:amplitude amp :direction direction}))
 
 (defn update-acceleration [blackhole asteroid]
   (let [force (calc-force blackhole asteroid)
-        acceleration (/ force (:mass asteroid))]
-    (swap! (:acceleration asteroid) (partial add-vectors acceleration))))
+        acceleration {:amplitude (/ force (:mass asteroid))
+                      :direction (theta asteroid blackhole)}]
+    (swap! (:acceleration asteroid)
+           (partial add-vectors acceleration))))
 
 (defn update-velocity [asteroid]
   (let [acceleration @(:acceleration asteroid)]
-    (swap! (:velocity asteroid) (partial add-vectors acceleration))))
+    (swap! (:velocity asteroid)
+           (partial add-vectors acceleration))))
 
 (defn update-position [asteroid]
   (let [velocity @(:velocity asteroid)
@@ -100,7 +108,7 @@
   (let [blackholes @(:blackholes state)
         asteroids @(:asteroids state)]
     (doseq [a asteroids]
-      (reset! (get a :acceleration) (zero-vector))
+      (reset! (get a :acceleration) {:amplitude 0 :direction 0})
       (doseq [b blackholes]
         (update-acceleration b a)
         (update-velocity a)
@@ -119,10 +127,10 @@
   (run! draw-shape @(:asteroids state)))
 
 (q/defsketch gravity
-  :title "Asteroids in a blackhole field"
-  :size [840 840]
-  :setup setup
-  :update update-state
-  :draw draw-state
-  :features [:keep-on-top]
-  :middleware [m/fun-mode])
+    :title "Asteroids in a blackhole field"
+    :size [840 840]
+    :setup setup
+    :update update-state
+    :draw draw-state
+    :features [:keep-on-top]
+    :middleware [m/fun-mode])
