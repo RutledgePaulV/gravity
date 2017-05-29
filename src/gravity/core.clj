@@ -1,9 +1,10 @@
 (ns gravity.core
   (:require [quil.core :as q]
-            [quil.middleware :as m])
+            [quil.middleware :as m]
+            [clojure.set :as sets])
   (:import (clojure.lang Atom)))
 
-(def G 6.674)
+(def G 1)
 
 (defn distance [m1 m2]
   (let [p1 @(:position m1)
@@ -26,42 +27,62 @@
 (defrecord Mass
   [position radius color mass velocity acceleration])
 
-(defn rand-x []
-  (rand-int (q/width)))
+(defn rand-x [radius]
+  (+ radius (rand-int (- (q/width) (* 2 radius)))))
 
-(defn rand-y []
-  (rand-int (q/height)))
+(defn rand-y [radius]
+  (+ radius (rand-int (- (q/height) (* 2 radius)))))
 
-(defn rand-position []
-  (atom {:x (rand-x) :y (rand-y)}))
+(defn rand-position [radius]
+  (atom {:x (rand-x radius) :y (rand-y radius)}))
 
 (defn rand-r []
-  (+ 25 (rand-int 25)))
+  (+ 10 (rand-int 25)))
 
 (defn rand-mass []
   (+ 25 (rand-int 25)))
 
+(defn rand-large-mass []
+  (+ 300 (rand-int 50)))
+
 (defn black [] [0 0 0])
 
+(defn rand-component []
+  (+ 135 (rand-int 120)))
+
 (defn rand-color []
-  (->> (fn [] (rand-int 255))
-       (repeatedly 3)
-       (into [])))
+  [(rand-component)
+   (rand-component)
+   (rand-component)])
 
 (defn zero-vector []
-  (atom {:amplitude 0 :direction 0}))
+  {:amplitude 0 :direction 0})
 
 (defn init-blackhole []
-  (->Mass (rand-position) (rand-r) (black) (rand-mass) (zero-vector) (zero-vector)))
+  (let [radius 50]
+    (->Mass
+      (rand-position radius)
+      radius
+      (black)
+      (rand-large-mass)
+      (atom (zero-vector))
+      (atom (zero-vector)))))
 
 (defn init-asteroid []
-  (->Mass (rand-position) (rand-r) (rand-color) (rand-mass) (zero-vector) (zero-vector)))
+  (let [radius (rand-r)]
+    (->Mass
+      (rand-position radius)
+      radius
+      (rand-color)
+      (rand-mass)
+      (atom (zero-vector))
+      (atom (zero-vector)))))
 
 (defn setup []
   (q/frame-rate 60)
   (q/color-mode :hsb)
-  {:blackholes (atom (set (repeatedly 3 init-blackhole)))
-   :asteroids  (atom (set (repeatedly 50 init-asteroid)))})
+  {:blackholes (atom (set (repeatedly 5 init-blackhole)))
+   :asteroids  (atom (set (repeatedly 500 init-asteroid)))})
 
 (defn x-comp [v]
   (let [amp (:amplitude v) theta (:direction v)]
@@ -104,15 +125,27 @@
                  (update :x (partial + +x))
                  (update :y (partial + +y)))))))
 
+(defn within? [b a]
+  (let [pb @(:position b)
+        pa @(:position a)
+        dx (- (:x pa) (:x pb))
+        dy (- (:y pa) (:y pb))
+        d (Math/sqrt (+ (* dx dx) (* dy dy)))]
+    (< d (:radius b))))
+
 (defn update-state [state]
   (let [blackholes @(:blackholes state)
         asteroids @(:asteroids state)]
     (doseq [a asteroids]
-      (reset! (get a :acceleration) {:amplitude 0 :direction 0})
+      (reset! (get a :acceleration) (zero-vector))
       (doseq [b blackholes]
         (update-acceleration b a)
         (update-velocity a)
-        (update-position a)))
+        (update-position a)
+        (when (within? b a)
+          (swap! (:asteroids state)
+                 (fn [asteroids]
+                   (sets/difference asteroids #{a}))))))
     state))
 
 (defn draw-shape [thing]
@@ -127,10 +160,10 @@
   (run! draw-shape @(:asteroids state)))
 
 (q/defsketch gravity
-    :title "Asteroids in a blackhole field"
-    :size [840 840]
-    :setup setup
-    :update update-state
-    :draw draw-state
-    :features [:keep-on-top]
-    :middleware [m/fun-mode])
+  :title "Asteroids in a blackhole field"
+  :size [840 840]
+  :setup setup
+  :update update-state
+  :draw draw-state
+  :features [:keep-on-top]
+  :middleware [m/fun-mode])
